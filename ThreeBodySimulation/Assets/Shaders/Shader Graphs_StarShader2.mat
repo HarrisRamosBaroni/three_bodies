@@ -51,8 +51,12 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _CellDensity: 4.5
+    - _FlareIntensity: 3
     - _QueueControl: 0
     - _QueueOffset: 0
-    m_Colors: []
+    m_Colors:
+    - _BaseColor: {r: 0.9924528, g: 0.743057, b: 0, a: 0}
+    - _CellColor: {r: 0.9169811, g: 0.14839658, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
