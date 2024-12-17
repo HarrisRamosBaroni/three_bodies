@@ -6,60 +6,111 @@ import matplotlib.animation as animation
 # Constants
 G = 6.67430e-11  # Gravitational constant (m^3 kg^-1 s^-2)
 c = 3e8  # Speed of light (m/s)
+au = 1.496e+11  # metres in au
 
 # Masses (in kg)
 m_A = 2.188e30  # Alpha Centauri A
 m_B = 1.81e30   # Alpha Centauri B
-m_planet = 5.97e24  # Hypothetical planet (Earth-mass)
+m_C = 0.2429e30  # Proxima Centauri
+masses = (m_A, m_B, m_C)
 
 # Semi-major axis (in meters)
-a_binary = 3.502e12  # Semi-major axis of binary stars
-a_planet_realistic = 1.496e11  # 1 AU in meters (distance from barycenter)
+# a_AB = 3.5455e12  # Approximate semi-major axis of Alpha Centauri A and B (23.7 au)
+a_AB = 35.6*au  # Approximate semi-major axis of Alpha Centauri A and B (23.7 au)
 
-# Orbital eccentricity
-e_binary = 0.5179
-
-# Derived parameters
-mu_binary = G * (m_A + m_B)  # Standard gravitational parameter for binary
+# Gravitational parameter for Alpha Centauri A and B system
+mu_AB = G * (m_A + m_B)
 
 # Initial positions and velocities
-r_A = np.array([-a_binary * (m_B / (m_A + m_B)), 0, 0])  # Position of A
-r_B = np.array([a_binary * (m_A / (m_A + m_B)), 0, 0])   # Position of B
+r_A = np.array([-a_AB * (m_B / (m_A + m_B)), 0, 0])  # Position of A
+r_B = np.array([a_AB * (m_A / (m_A + m_B)), 0, 0])   # Position of B
 
-v_A = np.array([0, np.sqrt(mu_binary * (1 + e_binary) / np.linalg.norm(r_A)), 0])  # Velocity of A
-v_B = np.array([0, -np.sqrt(mu_binary * (1 + e_binary) / np.linalg.norm(r_B)), 0])  # Velocity of B
+# Calculate the orbital velocities using the Vis-Viva equation
+# v_A = np.array([0, np.sqrt(mu_AB * (2/np.linalg.norm(r_A) - 1/a_AB)), 0])  # Velocity of A
+# v_B = np.array([0, -np.sqrt(mu_AB * (2/np.linalg.norm(r_B) - 1/a_AB)), 0])  # Velocity of B
+# v_A = np.array([0, np.sqrt(mu_AB * (1/a_AB)), 0])  # Velocity of A
+# v_B = np.array([0, -np.sqrt(mu_AB * (1/a_AB)), 0])  # Velocity of B
+v_A = np.array([0, 4.8e3, 0])  # Velocity of A
+v_B = np.array([0, -4.8e3, 0])  # Velocity of B
 
-r_planet_realistic = np.array([a_planet_realistic, 0, 0])  # Planet position
-v_planet_realistic = np.array([0, np.sqrt(G * (m_A + m_B) / a_planet_realistic), 0])  # Planet velocity
+# Position and velocity of Proxima Centauri (C) (still treated as orbiting the center of mass)
+a_C = 1.3015e15  # Semi-major axis of Proxima Centauri's orbit (8700 au)
+r_C = np.array([a_C, 0, 0])  # Position of C, assuming it lies along x-axis
+v_C = np.array([0, np.sqrt(G * (m_A + m_B) / np.linalg.norm(r_C)), 0])  # Velocity of C
+
+# Print the initial conditions
+print("Initial Conditions:")
+print(f"Position of A: {r_A}")
+print(f"Velocity of A: {v_A}")
+print(f"Position of B: {r_B}")
+print(f"Velocity of B: {v_B}")
+print(f"Position of centauri: {r_C}")
+print(f"Velocity of centauri: {v_C}")
 
 # Einstein-Infeld-Hoffmann (EIH) equations of motion
-def eih_accelerations(t, y):
+def eih_accelerations(t, state, masses, G, c):
+    n = len(masses)
+    x = state[:3*n].reshape(n, 3)
+    v = state[3*n:].reshape(n, 3)
+    a = np.zeros_like(x)
+
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                r_ij = x[j] - x[i]
+                r_ij_mag = np.linalg.norm(r_ij)
+                r_ij_unit = r_ij / r_ij_mag
+                v_ij = v[j] - v[i]
+
+                # Newtonian term
+                a[i] += G * masses[j] * r_ij_unit / r_ij_mag**2
+
+                # 1PN corrections
+                v_i_sq = np.dot(v[i], v[i])
+                v_j_sq = np.dot(v[j], v[j])
+                v_ij_sq = np.dot(v_ij, v_ij)
+
+                # EIH terms
+                a[i] += G * masses[j] / (c**2 * r_ij_mag**2) * (
+                    r_ij_unit * (
+                        4 * G * (masses[i] + masses[j]) / r_ij_mag
+                        - v_i_sq - 2 * v_j_sq + 4 * np.dot(v[i], v[j])
+                        - 1.5 * v_ij_sq
+                    )
+                    + 4 * v_ij * np.dot(v_ij, r_ij_unit)
+                )
+
+    return np.concatenate([v.flatten(), a.flatten()])
+
+def newton_accelerations(t, y):
     # Unpack positions and velocities
-    r_A, r_B, r_planet = y[:3], y[3:6], y[6:9]
-    v_A, v_B, v_planet = y[9:12], y[12:15], y[15:18]
+    r_A, r_B, r_C = y[:3], y[3:6], y[6:9]
+    v_A, v_B, v_C = y[9:12], y[12:15], y[15:18]
 
     # Distances
     r_AB = np.linalg.norm(r_A - r_B)
-    r_Ap = np.linalg.norm(r_A - r_planet)
-    r_Bp = np.linalg.norm(r_B - r_planet)
+    r_Ap = np.linalg.norm(r_A - r_C)
+    r_Bp = np.linalg.norm(r_B - r_C)
 
     # Newtonian accelerations
     a_A = -G * m_B * (r_A - r_B) / r_AB**3
     a_B = -G * m_A * (r_B - r_A) / r_AB**3
-    a_planet = -G * m_A * (r_planet - r_A) / r_Ap**3 - G * m_B * (r_planet - r_B) / r_Bp**3
+    a_C = -G * m_A * (r_C - r_A) / r_Ap**3 - G * m_B * (r_C - r_B) / r_Bp**3
 
-    return np.concatenate([v_A, v_B, v_planet, a_A, a_B, a_planet])
+    return np.concatenate([v_A, v_B, v_C, a_A, a_B, a_C])
 
 # Time span for one full planetary orbit
-planet_orbital_period = 2 * np.pi * np.sqrt(a_planet_realistic**3 / (G * (m_A + m_B)))
-t_span_realistic = (0, planet_orbital_period)
+centauri_orbital_period = 2 * np.pi * np.sqrt(a_C**3 / (G * (m_A + m_B)))
+t_span_realistic = (0, centauri_orbital_period)
 t_eval_realistic = np.linspace(t_span_realistic[0], t_span_realistic[1], 2000)
 
 # Initial state vector
-y0_realistic = np.concatenate([r_A, r_B, r_planet_realistic, v_A, v_B, v_planet_realistic])
+y0_realistic = np.concatenate([r_A, r_B, r_C, v_A, v_B, v_C])
 
 # Solve ODEs
-solution_realistic = solve_ivp(eih_accelerations, t_span_realistic, y0_realistic, t_eval=t_eval_realistic, method='RK45')
+solution_realistic = solve_ivp(eih_accelerations, t_span_realistic, y0_realistic, t_eval=t_eval_realistic, method='RK45', args=(masses, G, c))
+# solution_realistic = solve_ivp(newton_accelerations, t_span_realistic, y0_realistic, t_eval=t_eval_realistic, method='RK45')
+# print("type(solution_realistic)", type(solution_realistic))
 
 # Extract positions
 r_A_sol_realistic, r_B_sol_realistic, r_planet_sol_realistic = (
@@ -67,11 +118,14 @@ r_A_sol_realistic, r_B_sol_realistic, r_planet_sol_realistic = (
     solution_realistic.y[3:6],
     solution_realistic.y[6:9],
 )
+# print("r_A_sol_realistic", r_A_sol_realistic)
+# print("r_B_sol_realistic", r_B_sol_realistic)
+# print("r_planet_sol_realistic", r_planet_sol_realistic)
 
 # Prepare the animation
 fig, ax = plt.subplots(figsize=(8, 8))
-ax.set_xlim(-2 * a_planet_realistic, 2 * a_planet_realistic)
-ax.set_ylim(-2 * a_planet_realistic, 2 * a_planet_realistic)
+ax.set_xlim(-2 * a_C, 2 * a_C)
+ax.set_ylim(-2 * a_C, 2 * a_C)
 ax.set_title("Realistic Alpha Centauri System Simulation")
 ax.set_xlabel("x (m)")
 ax.set_ylabel("y (m)")
