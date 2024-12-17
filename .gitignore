@@ -3,7 +3,7 @@ sim.three bodies.md
 temp_stuff/
 pycache/
 __pycache__/
-
+simenv/
 
 # macOS.gitignore by github: https://github.com/github/gitignore/blob/master/Global/macOS.gitignore
 # General
