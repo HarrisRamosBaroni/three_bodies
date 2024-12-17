@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.integrate import solve_ivp
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
+import h5py
 
 # Constants
 G = 6.67430e-11  # Gravitational constant (m^3 kg^-1 s^-2)
@@ -16,7 +15,7 @@ m_planet = 1e24          # Planet mass (Earth-like planet)
 
 # Binary star orbit parameters
 a_binary = 0.224 * AU  # Semi-major axis of the binary (m)
-e_binary = 0.2         # Binary eccentricity (updated to ensure stability)
+e_binary = 0.2         # Binary eccentricity
 
 # Planet orbit parameters
 a_planet = 1.0 * AU  # Semi-major axis of the planet's orbit
@@ -70,56 +69,90 @@ def equations_of_motion(t, y):
     v = np.concatenate([v_A, v_B, v_planet])
     return np.concatenate([v, a])
 
-# Solve the system of ODEs
+# Simulation parameters
 t_span = (0, 5 * year)  # Simulate for 5 years
 t_eval = np.linspace(*t_span, 3000)  # Time steps
 y0 = initial_conditions()
 solution = solve_ivp(equations_of_motion, t_span, y0, t_eval=t_eval, method='RK45')
 
+# Check the shape of solution
+print(solution.y.shape)  # Should print (18, len(t_eval))
+
 # Extract results
-r_A_sol = solution.y[:3]
-r_B_sol = solution.y[3:6]
-r_planet_sol = solution.y[6:9]
+r_A_sol = solution.y[:3]         # Star A position (3 rows, len(t_eval) columns)
+r_B_sol = solution.y[3:6]         # Star B position (3 rows, len(t_eval) columns)
+r_planet_sol = solution.y[6:9]    # Planet position (3 rows, len(t_eval) columns)
+v_A_sol = solution.y[9:12]        # Star A velocity (3 rows, len(t_eval) columns)
+v_B_sol = solution.y[12:15]       # Star B velocity (3 rows, len(t_eval) columns)
+v_planet_sol = solution.y[15:18]  # Planet velocity (3 rows, len(t_eval) columns)
 
-# Visualization
-fig, ax = plt.subplots(figsize=(8, 8))
+# Debugging: Check the size of each result array
+print(f"r_A_sol shape: {r_A_sol.shape}")
+print(f"r_B_sol shape: {r_B_sol.shape}")
+print(f"r_planet_sol shape: {r_planet_sol.shape}")
 
-# Axis limits
-axis_limit = 1.5 * a_planet
-ax.set_xlim(-axis_limit, axis_limit)
-ax.set_ylim(-axis_limit, axis_limit)
+# Derived quantities
+kinetic_energy = []
+potential_energy = []
+total_energy = []
+momentum = []
+angular_momentum = []
 
-ax.set_title("Binary Stars and a Circumbinary Planet")
-ax.set_xlabel("X Position (m)")
-ax.set_ylabel("Y Position (m)")
+# Loop over all the time steps
+for i in range(len(t_eval)):  # i goes from 0 to len(t_eval) - 1
+    # Extract positions and velocities at time step i
+    r_A = r_A_sol[:, i]           # Star A position at time i
+    r_B = r_B_sol[:, i]           # Star B position at time i
+    r_planet = r_planet_sol[:, i] # Planet position at time i
+    v_A = v_A_sol[:, i]           # Star A velocity at time i
+    v_B = v_B_sol[:, i]           # Star B velocity at time i
+    v_planet = v_planet_sol[:, i] # Planet velocity at time i
 
-# Plot objects
-star_A_plot, = ax.plot([], [], 'o', color='orange', label="Star A", markersize=10)
-star_B_plot, = ax.plot([], [], 'o', color='yellow', label="Star B", markersize=10)
-planet_plot, = ax.plot([], [], 'o', color='blue', label="Planet", markersize=5)
-planet_orbit, = ax.plot([], [], '-', alpha=0.5, color='blue')
+    # Kinetic energy
+    KE_A = 0.5 * m_A * np.dot(v_A, v_A)
+    KE_B = 0.5 * m_B * np.dot(v_B, v_B)
+    KE_planet = 0.5 * m_planet * np.dot(v_planet, v_planet)
+    KE_total = KE_A + KE_B + KE_planet
+    kinetic_energy.append(KE_total)
 
-# Initialization
-def init():
-    star_A_plot.set_data([], [])
-    star_B_plot.set_data([], [])
-    planet_plot.set_data([], [])
-    planet_orbit.set_data([], [])
-    return star_A_plot, star_B_plot, planet_plot, planet_orbit
+    # Potential energy
+    r_AB = np.linalg.norm(r_A - r_B)
+    r_Ap = np.linalg.norm(r_planet - r_A)
+    r_Bp = np.linalg.norm(r_planet - r_B)
+    PE_AB = -G * m_A * m_B / r_AB
+    PE_Ap = -G * m_A * m_planet / r_Ap
+    PE_Bp = -G * m_B * m_planet / r_Bp
+    PE_total = PE_AB + PE_Ap + PE_Bp
+    potential_energy.append(PE_total)
 
-# Update function
-def update(frame):
-    # Update star positions
-    star_A_plot.set_data([r_A_sol[0, frame]], [r_A_sol[1, frame]])
-    star_B_plot.set_data([r_B_sol[0, frame]], [r_B_sol[1, frame]])
+    # Total energy
+    total_energy.append(KE_total + PE_total)
 
-    # Update planet position and orbit
-    planet_plot.set_data([r_planet_sol[0, frame]], [r_planet_sol[1, frame]])
-    planet_orbit.set_data(r_planet_sol[0, :frame+1], r_planet_sol[1, :frame+1])
+    # Momentum
+    P_A = m_A * v_A
+    P_B = m_B * v_B
+    P_planet = m_planet * v_planet
+    momentum.append(P_A + P_B + P_planet)
 
-    return star_A_plot, star_B_plot, planet_plot, planet_orbit
+    # Angular momentum
+    L_A = np.cross(r_A, P_A)
+    L_B = np.cross(r_B, P_B)
+    L_planet = np.cross(r_planet, P_planet)
+    angular_momentum.append(L_A + L_B + L_planet)
 
-# Animation
-ani = animation.FuncAnimation(fig, update, frames=len(t_eval), init_func=init, blit=True, interval=30)
-ax.legend()
-plt.show()
+# Save data
+with h5py.File("simulation_data.hdf5", "w") as f:
+    f.create_dataset("time", data=t_eval)
+    f.create_dataset("positions_A", data=r_A_sol)
+    f.create_dataset("positions_B", data=r_B_sol)
+    f.create_dataset("positions_planet", data=r_planet_sol)
+    f.create_dataset("velocities_A", data=v_A_sol)
+    f.create_dataset("velocities_B", data=v_B_sol)
+    f.create_dataset("velocities_planet", data=v_planet_sol)
+    f.create_dataset("kinetic_energy", data=kinetic_energy)
+    f.create_dataset("potential_energy", data=potential_energy)
+    f.create_dataset("total_energy", data=total_energy)
+    f.create_dataset("momentum", data=momentum)
+    f.create_dataset("angular_momentum", data=angular_momentum)
+
+print("Simulation data saved to simulation_data.hdf5")
