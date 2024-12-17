@@ -74,7 +74,12 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# Save results to HDF5 file
-df.to_hdf('simulation_data.hdf5', key='df', mode='w')
+# Ask the user if they want to save the data
+save_data = input("Do you want to save the simulation data? (y/n): ").strip().lower()
 
-print("Simulation data saved to simulation_data.hdf5")
+if save_data == 'y':
+    # Save results to HDF5 file
+    df.to_hdf('simulation_data.hdf5', key='df', mode='w')
+    print("Simulation data saved to simulation_data.hdf5")
+else:
+    print("Simulation data not saved.")
