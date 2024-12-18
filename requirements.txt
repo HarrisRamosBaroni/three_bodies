@@ -19,5 +19,4 @@ pyzmq
 numba
 pyyaml
 jplephem
-poliastro
 astroquery
