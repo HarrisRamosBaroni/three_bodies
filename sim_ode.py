@@ -17,28 +17,6 @@ jupiter_mass = 1.89813e27  # Mass of jupiter in kg
 earth_mass = 5.9722e24     # Mass of earth in kg (5.9722±0.0006 e24). https://en.wikipedia.org/wiki/Earth_mass
 year = 3.154e7   # Seconds in a year
 
-
-#------------------------------
-# System parameters: masses
-#------------------------------
-'''
-"A new set of "current best estimates" for various astronomical constants was approved
-the 27th General Assembly of the International Astronomical Union (IAU) in August 2009."
-https://en.wikipedia.org/wiki/Planetary_mass
-'''
-# m_A = 1 * solar_mass  # Mass of body A
-# m_B = 954.791915e-6 * solar_mass  # Mass of jupiter and satellites (954.7919e-6 Msol without satellites) Jacobson, R. A.; Haw, R. J.; McElrath, T. P.; Antreasian, P. G. (2000).
-# m_C = 285.8856708e-6 * solar_mass  # Mass of saturn and satellites (285.885670e-6 Msol without satellites) Jacobson, R. A.; Antreasian, P. G.; Bordi, J. J.; Criddle, K. E.; et al. (2006).
-
-# m_A = 1047.348644 * jupiter_mass
-# m_B = jupiter_mass  # Mass of jupiter alone
-# m_C = 0.29942197 * jupiter_mass # Mass of saturn alone
-
-m_A = 332946.0487 * earth_mass  # (332,946.0487±0.0007). The cited value is the recommended value published by the International Astronomical Union in 2009.
-m_B = earth_mass  # Mass of earth alone
-m_C = 0.0123000371 * earth_mass # Mass of moon alone. Pitjeva, E.V.; Standish, E.M. (1 April 2009).
-masses = (m_A, m_B, m_C)
-
 #-------------------
 # Obtain real data
 #-------------------
@@ -88,30 +66,18 @@ def obtain_ephemeris(bodies_names, bodies_ids, start_date='2022-01-01', end_date
 #---------------------------------------
 # Initial conditions and sim parameters
 #---------------------------------------
-# def initial_conditions(data, bodies_names):
-#     positions = []
-#     velocities = []
-    
-#     for body in bodies_names:
-#         # Extract positions and velocities for the body
-#         positions.extend([data[body]['x'][0], data[body]['y'][0], data[body]['z'][0]])
-#         velocities.extend([data[body]['vx'][0], data[body]['vy'][0], data[body]['vz'][0]])
-    
-#     # Concatenate positions and velocities
-#     y0 = np.array(positions + velocities)
-#     return y0
-
-def initial_conditions_si(data, bodies_names, noise_percentage=0.0):
+def initial_conditions_si(data, bodies_names, noise_std_pos=1e3, noise_std_vel=1e-2):
     """
-    Obtain initial conditions of initial value problem with specifiable gaussian noise
-
+    Obtain initial conditions with added noise for Monte Carlo simulations.
+    
     Parameters:
-    -data: dictionary containing emphemeris data
-    -bodies_names: names of celestial body that user is interested in (list of 3 strs)
-    -noise_multiplier: PERCENTAGE noise to add on each initial value returned
-
+    - data: dictionary containing ephemeris data
+    - bodies_names: names of celestial bodies (list of 3 strings)
+    - noise_std_position: standard deviation of Gaussian noise to add to positions (in meters)
+    - noise_std_velocity: standard deviation of Gaussian noise to add to velocities (in m/s)
+    
     Returns:
-    y0: initial values for the ivp [x, y, z, vx, vy, vz]
+    - y0: initial values for the IVP with noise [x, y, z, vx, vy, vz]
     """
     positions = []
     velocities = []
@@ -130,6 +96,14 @@ def initial_conditions_si(data, bodies_names, noise_percentage=0.0):
         vy = (data[body]['vy'][0] * u.au / u.day).to(u.m / u.s).value
         vz = (data[body]['vz'][0] * u.au / u.day).to(u.m / u.s).value
         
+        # Add Gaussian noise to positions and velocities
+        x += np.random.normal(0, noise_std_pos)
+        y += np.random.normal(0, noise_std_pos)
+        z += np.random.normal(0, noise_std_pos)
+        vx += np.random.normal(0, noise_std_vel)
+        vy += np.random.normal(0, noise_std_vel)
+        vz += np.random.normal(0, noise_std_vel)
+        
         # Append converted values to the respective lists
         positions.extend([x, y, z])
         velocities.extend([vx, vy, vz])
@@ -137,11 +111,7 @@ def initial_conditions_si(data, bodies_names, noise_percentage=0.0):
     # Concatenate positions and velocities to form the initial state vector
     y0 = np.array(positions + velocities)
 
-    if noise_percentage:
-        for i in range(len(y0)):
-            y0[i] += noise_percentage/100 * np.randn() 
-            
-    return y0 
+    return y0
 
 # Define t_span and t_eval based on data['time']
 def time_parameters(data):
@@ -227,19 +197,21 @@ def newton_accelerations(t, y, masses):
     return np.concatenate([velocities.flatten(), accelerations.flatten()])
 
 class Sim():
-    def __init__(self, bodies_names, bodies_ids, start_date, end_date, ode, noise_percentage=0.0, method='RK45', debug_prints=True):
+    def __init__(self, bodies_names, bodies_ids, start_date, end_date, ode, noise_std_pos=0.0, noise_std_vel=0.0, method='RK45', debug_prints=True):
         self.bodies_names = bodies_names  # names of the celestial bodies of interest (for labelling purposes)
         self.bodies_ids = bodies_ids      # identification number of the celestial bodies of interest
         self.start_date = start_date      # ephemeris start date eg '2022-01-01'
         self.end_date = end_date          # ephemeris end date
-        self.noise_percentage = noise_percentage
+        # self.noise_percentage = noise_percentage
+        self.noise_std_pos = noise_std_pos 
+        self.noise_std_vel = noise_std_vel
         self.method = method              # initial value problem solver method. 'RK45', 'LSODA', ...
         self.ode = ode                    # function describing system ode. eih_accelerations or newton_accelerations 
         self.debug_prints = debug_prints
 
         self.ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids, start_date=self.start_date, end_date=self.end_date, step='1h')
         # Simulation parameters
-        self.y0 = initial_conditions_si(self.ephemeris_data, bodies_names, noise_percentage=0.0)
+        self.y0 = initial_conditions_si(self.ephemeris_data, bodies_names, noise_std_pos, noise_std_vel)
         # self.t_span, self.t_eval = time_parameters(self.ephemeris_data)
         sampled_hours = len(self.ephemeris_data['time'])
         self.t_span = (0, 3600 * sampled_hours)  # run sim for 3600 * sampled_hours seconds
@@ -277,7 +249,7 @@ class Sim():
         # Function to format the body names into a string (e.g., "Sun-Earth-Moon")
         return '-'.join(body_names)
     
-    def save(self):
+    def save_sim_data(self):
         #------------------------------
         # Sim data save
         #------------------------------
@@ -301,7 +273,7 @@ class Sim():
         save_data = input("Do you want to save the simulation data? (y/n): ").strip().lower()
         if save_data == 'y':
             # Get the ODE function name and corresponding directory
-            print("self.ode", self.ode)
+            # print("self.ode", self.ode)
             ode_directory = self.get_ode_directory(self.ode)
             os.makedirs(ode_directory, exist_ok=True)  # Ensure the directory exists (create if not existing already)
             
@@ -310,7 +282,7 @@ class Sim():
             
             # Generate the filename with the required format
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"{body_names_str}_{start_date}_{end_date}_noise{int(self.noise_percentage)}_{timestamp}.csv"
+            filename = f"{body_names_str}_{start_date}_{end_date}_noise{int(self.noise_std_pos)}_{int(self.noise_std_vel)}-{timestamp}.csv"
             file_path = os.path.join(ode_directory, filename)
 
             # Save the data to the CSV file
@@ -319,7 +291,7 @@ class Sim():
         else:
             print("Simulation data not saved.")            
 
-
+    def save_eph_data(self):
         #------------------------------
         # Ephemeris data save
         #------------------------------
@@ -375,17 +347,42 @@ class Sim():
         else:
             print("Ephemeris data not saved.")        
 
+#------------------------------
+# System parameters: masses
+#------------------------------
+'''
+"A new set of "current best estimates" for various astronomical constants was approved
+the 27th General Assembly of the International Astronomical Union (IAU) in August 2009."
+https://en.wikipedia.org/wiki/Planetary_mass
+'''
+# m_A = 1 * solar_mass  # Mass of body A
+# m_B = 954.791915e-6 * solar_mass  # Mass of jupiter and satellites (954.7919e-6 Msol without satellites) Jacobson, R. A.; Haw, R. J.; McElrath, T. P.; Antreasian, P. G. (2000).
+# m_C = 285.8856708e-6 * solar_mass  # Mass of saturn and satellites (285.885670e-6 Msol without satellites) Jacobson, R. A.; Antreasian, P. G.; Bordi, J. J.; Criddle, K. E.; et al. (2006).
+
+# m_A = 1047.348644 * jupiter_mass
+# m_B = jupiter_mass  # Mass of jupiter alone
+# m_C = 0.29942197 * jupiter_mass # Mass of saturn alone
+
+m_A = 332946.0487 * earth_mass  # (332,946.0487±0.0007). The cited value is the recommended value published by the International Astronomical Union in 2009.
+m_B = earth_mass  # Mass of earth alone
+m_C = 0.0123000371 * earth_mass # Mass of moon alone. Pitjeva, E.V.; Standish, E.M. (1 April 2009).
+masses = (m_A, m_B, m_C)
+
 # Obtain eph data
 # bodies_names = ['Jupiter', 'Sun', 'Earth', 'Saturn']
 # bodies_ids = ['599', '10', '399', '699']
-# bodies_names = ['Sun', 'Earth', 'Moon']
-# bodies_ids = ['10', '399', '301']
-bodies_names = ['Sun', 'Jupiter barycenter', 'Saturn barycenter']
-bodies_ids = ['10', '5', '6']
+bodies_names = ['Sun', 'Earth', 'Moon']
+bodies_ids = ['10', '399', '301']
+# bodies_names = ['Sun', 'Jupiter barycenter', 'Saturn barycenter']
+# bodies_ids = ['10', '5', '6']
 #ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids , step='1h')
 start_date='2022-01-01'
 end_date='2023-12-31'
 
-sim = Sim(bodies_names=bodies_names, bodies_ids=bodies_ids, start_date=start_date, end_date=end_date, ode=newton_accelerations, noise_percentage= 0.0, method='RK45')
-sim.solve()
-sim.save()
+sim = Sim(bodies_names=bodies_names, bodies_ids=bodies_ids, start_date=start_date, end_date=end_date,
+          ode=newton_accelerations, noise_std_pos=1e3, noise_std_vel=0.0, method='RK45')
+sim.save_eph_data()
+n_runs = 3
+for _ in range(n_runs):
+    sim.solve()
+    sim.save_sim_data()
