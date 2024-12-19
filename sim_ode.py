@@ -4,6 +4,8 @@ from scipy.integrate import solve_ivp
 from astroquery.jplhorizons import Horizons
 import astropy.units as u
 import h5py
+import os
+from datetime import datetime
 
 #-------------------
 # Constants
@@ -151,7 +153,7 @@ def time_parameters(data):
 #-------------
 # ODE stuff
 #-------------
-def eih_accelerations(t, state, masses, G, c):
+def eih_accelerations(t, state, masses): # , G=G, c=c):
     '''
     Einstein-Infeld-Hoffmann (EIH) equations of motion
     '''
@@ -224,52 +226,57 @@ def newton_accelerations(t, y, masses):
     # Return the derivatives of the positions and velocities
     return np.concatenate([velocities.flatten(), accelerations.flatten()])
 
-# Obtain eph data
-# bodies_names = ['Jupiter', 'Sun', 'Earth', 'Saturn']
-# bodies_ids = ['599', '10', '399', '699']
-bodies_names = ['Sun', 'Earth', 'Moon']
-bodies_ids = ['10', '399', '301']
-# bodies_names = ['Sun', 'Jupiter barycenter', 'Saturn barycenter']
-# bodies_ids = ['10', '5', '6']
-#ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids , step='1h')
-
 class Sim():
-    def __init__(self,bodies_names,bodies_ids,noise_percentage=0.0,method='RK45'):
-        self.bodies_names = bodies_names
-        self.bodies_ids = bodies_ids
+    def __init__(self, bodies_names, bodies_ids, start_date, end_date, ode, noise_percentage=0.0, method='RK45', debug_prints=True):
+        self.bodies_names = bodies_names  # names of the celestial bodies of interest (for labelling purposes)
+        self.bodies_ids = bodies_ids      # identification number of the celestial bodies of interest
+        self.start_date = start_date      # ephemeris start date eg '2022-01-01'
+        self.end_date = end_date          # ephemeris end date
         self.noise_percentage = noise_percentage
-        self.method = method
+        self.method = method              # initial value problem solver method. 'RK45', 'LSODA', ...
+        self.ode = ode                    # function describing system ode. eih_accelerations or newton_accelerations 
+        self.debug_prints = debug_prints
 
-        self.ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids, step='1h')
+        self.ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids, start_date=self.start_date, end_date=self.end_date, step='1h')
         # Simulation parameters
-        # y0 = np.concatenate([r_A, r_B, r_C, v_A, v_B, v_C])
         self.y0 = initial_conditions_si(self.ephemeris_data, bodies_names, noise_percentage=0.0)
-        print(self.y0)
-        # print(y0.shape)  # (18,)
-        self.t_span, self.t_eval = time_parameters(self.ephemeris_data)
-        # print(t_span, t_eval)
-        # print(t_span)
-        self.t_span = (0, 2 * year)  # Simulate for n years. 8,760 hours in a normal year
-        self.t_eval = np.linspace(*self.t_span, 2 * 8760)  # Ensure consistent steps. make many steps, eg 600 in 5 years is not good enough and will get # solution.message = 'Required step size is less than spacing between numbers.'
-        # print(t_span)
+        # self.t_span, self.t_eval = time_parameters(self.ephemeris_data)
+        sampled_hours = len(self.ephemeris_data['time'])
+        self.t_span = (0, 3600 * sampled_hours)  # run sim for 3600 * sampled_hours seconds
+        self.t_eval = np.linspace(*self.t_span, sampled_hours)  # steps every hour
+        if self.debug_prints:
+            # print("type(self.ephemeris_data['time'])", type(self.ephemeris_data['time']))
+            unmasked_length = self.ephemeris_data['time'].count()
+            print("unmasked_length", unmasked_length)
+            print("len(self.ephemeris_data['time'])", len(self.ephemeris_data['time']))
+            # print("self.y0", self.y0)  # initial conditions
+            # print(y0.shape)  # (18,)
+            # print(t_span, t_eval)
 
     def solve(self):
         # Solve the system
-        # solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses,))
-        if self.method == 'RK45':
-            solution = solve_ivp(newton_accelerations, self.t_span, self.y0, t_eval=self.t_eval, method='RK45', args=(masses,), rtol=1e-8, atol=1e-8)
-        # solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses,))
-        # solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses, G, c))
-        # solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses, G, c))
+        solution = solve_ivp(self.ode, self.t_span, self.y0, t_eval=self.t_eval, method=self.method, args=(masses,), rtol=1e-8, atol=1e-8)
 
         # Extract results with consistent time steps
         self.t_result = solution.t
-        # print(solution.y)
-        self.soly_num = np.array(solution.y)
-        print(self.soly_num.shape)
+        if self.debug_prints:
+            soly_num = np.array(solution.y)
+            print("solution.y.shape", soly_num.shape)
+            # print(solution.y)
         self.positions = solution.y[:9, :].T  # Positions: r_A, r_B, r_C
         self.velocities = solution.y[9:, :].T  # Velocities: v_A, v_B, v_C
 
+    @staticmethod
+    def get_ode_directory(ode_function):
+        # Function to get the directory path based on ODE name
+        ode_name = ode_function.__name__  # Get the function name (e.g., "newton_accelerations")
+        return os.path.join('data', ode_name)
+
+    @staticmethod
+    def format_body_names(body_names):
+        # Function to format the body names into a string (e.g., "Sun-Earth-Moon")
+        return '-'.join(body_names)
+    
     def save(self):
         #------------------------------
         # Sim data save
@@ -290,15 +297,28 @@ class Sim():
         }
         df = pd.DataFrame(data)
 
-        # Ask the user if they want to save the data
+        # Save the simulation data
         save_data = input("Do you want to save the simulation data? (y/n): ").strip().lower()
         if save_data == 'y':
-            # Save results to csv file
-            df.to_csv(f'simulation_data_noise_{int(self.noise_percentage)}.csv', mode='w')
-            print(f"Simulation data saved to simulation_data_noise_{int(self.noise_percentage)}.csv")
-        else:
-            print("Simulation data not saved.")
+            # Get the ODE function name and corresponding directory
+            print("self.ode", self.ode)
+            ode_directory = self.get_ode_directory(self.ode)
+            os.makedirs(ode_directory, exist_ok=True)  # Ensure the directory exists (create if not existing already)
             
+            # Format the body names into a string
+            body_names_str = self.format_body_names(self.bodies_names)
+            
+            # Generate the filename with the required format
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{body_names_str}_{start_date}_{end_date}_noise{int(self.noise_percentage)}_{timestamp}.csv"
+            file_path = os.path.join(ode_directory, filename)
+
+            # Save the data to the CSV file
+            df.to_csv(file_path, mode='w')
+            print(f"Simulation data saved to {file_path}")
+        else:
+            print("Simulation data not saved.")            
+
 
         #------------------------------
         # Ephemeris data save
@@ -335,87 +355,37 @@ class Sim():
         }
         df = pd.DataFrame(ephemeris_data)
 
-        # Ask the user if they want to save the data
-        save_data = input("Do you want to save the ephemeris data? (y/n): ").strip().lower()
-        if save_data == 'y':
-            # Save results to csv file
-            df.to_csv('ephemeris_data.csv', mode='w')
-            print("Ephemeris data saved to ephemeris_data.csv")
-        else:
-            print("Ephemeris data not saved.")
-        
+        # Save Ephemeris Data (same directory structure idea)
+        save_ephemeris_data = input("Do you want to save the ephemeris data? (y/n): ").strip().lower()
+        if save_ephemeris_data == 'y':
+            # Ensure ephemeris data is saved in a subdirectory
+            ephemeris_directory = os.path.join('data', 'ephemeris')
+            os.makedirs(ephemeris_directory, exist_ok=True) # Ensure the directory exists (create if not existing already)
+            
+            # Format the body names into a string
+            body_names_str = self.format_body_names(self.bodies_names)
+            
+            # Generate the filename with the required format
+            ephemeris_filename = f"{body_names_str}_{self.start_date}_{self.end_date}.csv"
+            ephemeris_file_path = os.path.join(ephemeris_directory, ephemeris_filename)
 
-sim = Sim(bodies_names=bodies_names, bodies_ids=bodies_ids , noise_percentage= 0.0, method='RK45')
+            # Save the ephemeris data to the CSV file
+            df.to_csv(ephemeris_file_path, mode='w')
+            print(f"Ephemeris data saved to {ephemeris_file_path}")
+        else:
+            print("Ephemeris data not saved.")        
+
+# Obtain eph data
+# bodies_names = ['Jupiter', 'Sun', 'Earth', 'Saturn']
+# bodies_ids = ['599', '10', '399', '699']
+# bodies_names = ['Sun', 'Earth', 'Moon']
+# bodies_ids = ['10', '399', '301']
+bodies_names = ['Sun', 'Jupiter barycenter', 'Saturn barycenter']
+bodies_ids = ['10', '5', '6']
+#ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids , step='1h')
+start_date='2022-01-01'
+end_date='2023-12-31'
+
+sim = Sim(bodies_names=bodies_names, bodies_ids=bodies_ids, start_date=start_date, end_date=end_date, ode=newton_accelerations, noise_percentage= 0.0, method='RK45')
 sim.solve()
 sim.save()
-'''
-#------------------------------
-# Sim data save
-#------------------------------
-# Create a pandas DataFrame
-data = {
-    'time': t_result,
-    'r_A_x': positions[:, 0], 'r_A_y': positions[:, 1], 'r_A_z': positions[:, 2],
-    'r_B_x': positions[:, 3], 'r_B_y': positions[:, 4], 'r_B_z': positions[:, 5],
-    'r_C_x': positions[:, 6], 'r_C_y': positions[:, 7], 'r_C_z': positions[:, 8],
-    'v_A_x': velocities[:, 0], 'v_A_y': velocities[:, 1], 'v_A_z': velocities[:, 2],
-    'v_B_x': velocities[:, 3], 'v_B_y': velocities[:, 4], 'v_B_z': velocities[:, 5],
-    'v_C_x': velocities[:, 6], 'v_C_y': velocities[:, 7], 'v_C_z': velocities[:, 8],
-}
-df = pd.DataFrame(data)
-
-# Ask the user if they want to save the data
-save_data = input("Do you want to save the simulation data? (y/n): ").strip().lower()
-if save_data == 'y':
-    # Save results to csv file
-    df.to_csv('simulation_data.csv', mode='w')
-    print("Simulation data saved to simulation_data.csv")
-else:
-    print("Simulation data not saved.")
-    
-
-#------------------------------
-# Ephemeris data save
-#------------------------------
-time = ephemeris_data['time']
-
-positions = []
-velocities = []
-
-# Extract positions and velocities for the three bodies
-for body_name in bodies_names:
-    body_data = ephemeris_data[body_name]
-    
-    # Extract position (x, y, z) and velocity (vx, vy, vz) for each body
-    body_positions = np.array([body_data['x'], body_data['y'], body_data['z']]).T
-    body_velocities = np.array([body_data['vx'], body_data['vy'], body_data['vz']]).T
-    
-    positions.append(body_positions)
-    velocities.append(body_velocities)
-
-# Stack all positions and velocities horizontally. (shape will be (n, 9) for 3 bodies)
-positions = np.hstack(positions)
-velocities = np.hstack(velocities)
-
-# Create the data dictionary in the same format as the sim data
-ephemeris_data = {
-    'time': time,
-    'r_A_x': positions[:, 0], 'r_A_y': positions[:, 1], 'r_A_z': positions[:, 2],
-    'r_B_x': positions[:, 3], 'r_B_y': positions[:, 4], 'r_B_z': positions[:, 5],
-    'r_C_x': positions[:, 6], 'r_C_y': positions[:, 7], 'r_C_z': positions[:, 8],
-    'v_A_x': velocities[:, 0], 'v_A_y': velocities[:, 1], 'v_A_z': velocities[:, 2],
-    'v_B_x': velocities[:, 3], 'v_B_y': velocities[:, 4], 'v_B_z': velocities[:, 5],
-    'v_C_x': velocities[:, 6], 'v_C_y': velocities[:, 7], 'v_C_z': velocities[:, 8],
-}
-df = pd.DataFrame(ephemeris_data)
-
-# Ask the user if they want to save the data
-save_data = input("Do you want to save the ephemeris data? (y/n): ").strip().lower()
-if save_data == 'y':
-    # Save results to csv file
-    df.to_csv('ephemeris_data.csv', mode='w')
-    print("Ephemeris data saved to ephemeris_data.csv")
-else:
-    print("Ephemeris data not saved.")
-'''
-
