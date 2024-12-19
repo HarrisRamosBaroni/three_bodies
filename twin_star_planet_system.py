@@ -47,8 +47,10 @@ print(f"Velocity of B: {v_B}")
 print(f"Position of centauri: {r_C}")
 print(f"Velocity of centauri: {v_C}")
 
-# Einstein-Infeld-Hoffmann (EIH) equations of motion
 def eih_accelerations(t, state, masses, G, c):
+    '''
+    Einstein-Infeld-Hoffmann (EIH) equations of motion
+    '''
     n = len(masses)
     x = state[:3*n].reshape(n, 3)
     v = state[3*n:].reshape(n, 3)
@@ -82,22 +84,40 @@ def eih_accelerations(t, state, masses, G, c):
 
     return np.concatenate([v.flatten(), a.flatten()])
 
-def newton_accelerations(t, y):
-    # Unpack positions and velocities
-    r_A, r_B, r_C = y[:3], y[3:6], y[6:9]
-    v_A, v_B, v_C = y[9:12], y[12:15], y[15:18]
+def calculate_gravitational_force(pos_1, pos_2, mass_1, mass_2):
+    '''
+    Function to compute gravitational force between two bodies
+    '''
+    distance_vector = pos_2 - pos_1
+    distance = np.linalg.norm(distance_vector)
+    if distance == 0:  # Prevent division by zero in case of overlapping bodies
+        return np.zeros_like(distance_vector)
+    force = G * mass_1 * mass_2 * distance_vector / distance**3
+    return force
 
-    # Distances
-    r_AB = np.linalg.norm(r_A - r_B)
-    r_Ap = np.linalg.norm(r_A - r_C)
-    r_Bp = np.linalg.norm(r_B - r_C)
+def newton_accelerations(t, y, masses):
+    '''
+    Equations of motion of n bodies (newtonian)
+    '''
+    n = len(masses)  # no. of bodies
+    
+    # Unpack positions and velocities from the state vector y
+    positions = y[:n*3].reshape((n, 3))   # (n x 3) array of positions
+    velocities = y[n*3:].reshape((n, 3))  # (n x 3) array of velocities
+    
+    accelerations = np.zeros_like(positions)  # initialise accel.s (n x 3 array)
 
-    # Newtonian accelerations
-    a_A = -G * m_B * (r_A - r_B) / r_AB**3
-    a_B = -G * m_A * (r_B - r_A) / r_AB**3
-    a_C = -G * m_A * (r_C - r_A) / r_Ap**3 - G * m_B * (r_C - r_B) / r_Bp**3
+    # Compute the gravitational forces between all pairs of bodies
+    for i in range(n):
+        total_force = np.zeros(3)  # total force on body i
+        for j in range(n):
+            if i != j:
+                force_ij = calculate_gravitational_force(positions[i], positions[j], masses[i], masses[j])
+                total_force += force_ij
+        accelerations[i] = total_force / masses[i]  # newtons second law F = ma
 
-    return np.concatenate([v_A, v_B, v_C, a_A, a_B, a_C])
+    # Return the derivatives of the positions and velocities
+    return np.concatenate([velocities.flatten(), accelerations.flatten()])
 
 # Time span for one full planetary orbit
 centauri_orbital_period = 2 * np.pi * np.sqrt(a_C**3 / (G * (m_A + m_B)))
@@ -108,8 +128,8 @@ t_eval_realistic = np.linspace(t_span_realistic[0], t_span_realistic[1], 2000)
 y0_realistic = np.concatenate([r_A, r_B, r_C, v_A, v_B, v_C])
 
 # Solve ODEs
-solution_realistic = solve_ivp(eih_accelerations, t_span_realistic, y0_realistic, t_eval=t_eval_realistic, method='RK45', args=(masses, G, c))
-# solution_realistic = solve_ivp(newton_accelerations, t_span_realistic, y0_realistic, t_eval=t_eval_realistic, method='RK45')
+# solution_realistic = solve_ivp(eih_accelerations, t_span_realistic, y0_realistic, t_eval=t_eval_realistic, method='RK45', args=(masses, G, c))
+solution_realistic = solve_ivp(newton_accelerations, t_span_realistic, y0_realistic, t_eval=t_eval_realistic, method='RK45', args=(masses,))
 # print("type(solution_realistic)", type(solution_realistic))
 
 # Extract positions
