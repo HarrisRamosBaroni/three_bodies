@@ -211,7 +211,7 @@ class Sim():
 
         self.ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids, start_date=self.start_date, end_date=self.end_date, step='1h')
         # Simulation parameters
-        self.y0 = initial_conditions_si(self.ephemeris_data, bodies_names, noise_std_pos, noise_std_vel)
+        # self.y0 = initial_conditions_si(self.ephemeris_data, bodies_names, noise_std_pos, noise_std_vel)
         # self.t_span, self.t_eval = time_parameters(self.ephemeris_data)
         sampled_hours = len(self.ephemeris_data['time'])
         self.t_span = (0, 3600 * sampled_hours)  # run sim for 3600 * sampled_hours seconds
@@ -225,6 +225,18 @@ class Sim():
             # print(y0.shape)  # (18,)
             # print(t_span, t_eval)
 
+        self._y0 = None  # Private attribute to hold the value of y0
+    
+    @property
+    def y0(self):
+        """Getter for y0."""
+        return self._y0    
+
+    @y0.setter
+    def y0(self, dummy):
+        """Setter function for y0 that calculates initial conditions."""
+        self._y0 = initial_conditions_si(self.ephemeris_data, self.bodies_names, self.noise_std_pos, self.noise_std_vel)
+    
     def solve(self):
         # Solve the system
         solution = solve_ivp(self.ode, self.t_span, self.y0, t_eval=self.t_eval, method=self.method, args=(masses,), rtol=1e-8, atol=1e-8)
@@ -384,5 +396,7 @@ sim = Sim(bodies_names=bodies_names, bodies_ids=bodies_ids, start_date=start_dat
 sim.save_eph_data()
 n_runs = 3
 for _ in range(n_runs):
+    sim.y0 = None  # obtain initial condition with new gaussian noise
+    print("sim.y0", sim.y0)
     sim.solve()
     sim.save_sim_data()
