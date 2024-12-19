@@ -20,3 +20,4 @@ numba
 pyyaml
 jplephem
 astroquery
+h5py
