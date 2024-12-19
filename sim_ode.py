@@ -13,12 +13,16 @@ G = 6.67430e-11  # Gravitational constant (m^3 kg^-1 s^-2)
 c = 3e8  # Speed of light (m/s)
 AU = 1.496e11    # Astronomical unit in meters
 solar_mass = 1.989e30  # Solar mass in kg
+jupiter_mass = 1.89813e27  # Mass of jupiter in kg
 year = 3.154e7   # Seconds in a year
 
 # System Parameters
-m_A = 1 * solar_mass  # Mass of body A
-m_B = 0.00189813 * solar_mass  # Mass of body B
-m_C = 0.000578 * solar_mass  # Mass of body C
+# m_A = 1 * solar_mass  # Mass of body A
+# m_B = 0.00189813 * solar_mass  # Mass of body B
+# m_C = 0.000578 * solar_mass  # Mass of body C
+m_A = 1047.348644 * jupiter_mass
+m_B = jupiter_mass
+m_C = 0.29942197 * jupiter_mass
 masses = (m_A, m_B, m_C)
 
 
@@ -27,10 +31,10 @@ masses = (m_A, m_B, m_C)
 # #-------------------
 
 # # Masses (in kg)
-# m_A = 2.188e30  # Alpha Centauri A
-# m_B = 1.81e30   # Alpha Centauri B
-# m_C = 0.2429e30  # Proxima Centauri
-# masses = (m_A, m_B, m_C)
+m_A = 2.188e30  # Alpha Centauri A
+m_B = 1.81e30   # Alpha Centauri B
+m_C = 0.2429e30  # Proxima Centauri
+masses = (m_A, m_B, m_C)
 
 # # Semi-major axis (in meters)
 # # a_AB = 3.5455e12  # Approximate semi-major axis of Alpha Centauri A and B (23.7 au)
@@ -216,10 +220,10 @@ ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids)
 # Simulation parameters
 # y0 = np.concatenate([r_A, r_B, r_C, v_A, v_B, v_C])
 y0 = initial_conditions(ephemeris_data, bodies_names)
-# print(y0)
+print(y0)
 # print(y0.shape)  # (18,)
-t_span = (0, 5 * year)  # Simulate for 5 years
-t_eval = np.linspace(*t_span, 2000)  # Ensure consistent steps. make many steps, eg 600 in 5 years is not good enough and will get # solution.message = 'Required step size is less than spacing between numbers.'
+t_span = (0, 1 * year)  # Simulate for 5 years
+t_eval = np.linspace(*t_span, 10000)  # Ensure consistent steps. make many steps, eg 600 in 5 years is not good enough and will get # solution.message = 'Required step size is less than spacing between numbers.'
 # t_span, t_eval = time_parameters(ephemeris_data)
 # print(t_span, t_eval)
 
