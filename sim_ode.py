@@ -269,7 +269,7 @@ df = pd.DataFrame(data)
 save_data = input("Do you want to save the simulation data? (y/n): ").strip().lower()
 if save_data == 'y':
     # Save results to HDF5 file
-    df.to_hdf('simulation_data.hdf5', key='df', mode='w')
+    df.to_csv('simulation_data.csv', mode='w')
     print("Simulation data saved to simulation_data.hdf5")
 else:
     print("Simulation data not saved.")
@@ -288,7 +288,7 @@ positions = []
 velocities = []
 
 # Extract positions and velocities for the three bodies
-for body_name in ['Earth', 'Jupiter', 'Saturn']:
+for body_name in bodies_names:
     body_data = ephemeris_data[body_name]
     
     # Extract position (x, y, z) and velocity (vx, vy, vz) for each body
@@ -318,7 +318,7 @@ df = pd.DataFrame(ephemeris_data)
 save_data = input("Do you want to save the ephemeris data? (y/n): ").strip().lower()
 if save_data == 'y':
     # Save results to HDF5 file
-    df.to_hdf('ephemeris_data.hdf5', key='df', mode='w')
+    df.to_csv('ephemeris_data.csv', mode='w')
     print("Ephemeris data saved to ephemeris_data.hdf5")
 else:
     print("Ephemeris data not saved.")
