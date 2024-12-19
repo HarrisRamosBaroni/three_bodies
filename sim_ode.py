@@ -6,71 +6,41 @@ import astropy.units as u
 import h5py
 
 #-------------------
-# important stuff
-#-------------------
-
 # Constants
-G = 6.67430e-11  # Gravitational constant (m^3 kg^-1 s^-2)
-c = 3e8  # Speed of light (m/s)
-AU = 1.496e11    # Astronomical unit in meters
-solar_mass = 1.989e30  # Solar mass in kg
+#-------------------
+G = 6.6743015e-11  # Gravitational constant (m^3 kg^-1 s^-2). Relative standard uncertainty is 2.2e−5. CODATA-recommended value of the gravitational constant.
+c = 2.99792458e8   # Speed of light (m/s). This value is EXACT by definition.
+solar_mass = 1.988475e30   # Solar mass in kg (1.988475±0.000092 e30) Prša, Andrej; ...; Donald W.; Laskar, Jacques (2016-08-01). "NOMINAL VALUES FOR SELECTED SOLAR AND PLANETARY QUANTITIES: IAU 2015 RESOLUTION B3 * †"
 jupiter_mass = 1.89813e27  # Mass of jupiter in kg
+earth_mass = 5.9722e24     # Mass of earth in kg (5.9722±0.0006 e24). https://en.wikipedia.org/wiki/Earth_mass
 year = 3.154e7   # Seconds in a year
 
-# System Parameters
+
+#------------------------------
+# System parameters: masses
+#------------------------------
+'''
+"A new set of "current best estimates" for various astronomical constants was approved
+the 27th General Assembly of the International Astronomical Union (IAU) in August 2009."
+https://en.wikipedia.org/wiki/Planetary_mass
+'''
 # m_A = 1 * solar_mass  # Mass of body A
-# m_B = 0.00189813 * solar_mass  # Mass of body B
-# m_C = 0.000578 * solar_mass  # Mass of body C
-m_A = 1047.348644 * jupiter_mass
-m_B = jupiter_mass
-m_C = 0.29942197 * jupiter_mass
+# m_B = 954.791915e-6 * solar_mass  # Mass of jupiter and satellites (954.7919e-6 Msol without satellites) Jacobson, R. A.; Haw, R. J.; McElrath, T. P.; Antreasian, P. G. (2000).
+# m_C = 285.8856708e-6 * solar_mass  # Mass of saturn and satellites (285.885670e-6 Msol without satellites) Jacobson, R. A.; Antreasian, P. G.; Bordi, J. J.; Criddle, K. E.; et al. (2006).
+
+# m_A = 1047.348644 * jupiter_mass
+# m_B = jupiter_mass  # Mass of jupiter alone
+# m_C = 0.29942197 * jupiter_mass # Mass of saturn alone
+
+m_A = 332946.0487 * earth_mass  # (332,946.0487±0.0007). The cited value is the recommended value published by the International Astronomical Union in 2009.
+m_B = earth_mass  # Mass of earth alone
+m_C = 0.0123000371 * earth_mass # Mass of moon alone. Pitjeva, E.V.; Standish, E.M. (1 April 2009).
 masses = (m_A, m_B, m_C)
-
-
-#-------------------
-# random initial conditions
-# #-------------------
-
-# # Masses (in kg)
-# m_A = 2.188e30  # Alpha Centauri A
-# m_B = 1.81e30   # Alpha Centauri B
-# m_C = 0.2429e30  # Proxima Centauri
-# masses = (m_A, m_B, m_C)
-
-# # Semi-major axis (in meters)
-# # a_AB = 3.5455e12  # Approximate semi-major axis of Alpha Centauri A and B (23.7 au)
-# a_AB = 35.6*AU  # Approximate semi-major axis of Alpha Centauri A and B (23.7 au)
-
-# # Gravitational parameter for Alpha Centauri A and B system
-# mu_AB = G * (m_A + m_B)
-
-# # Initial positions and velocities
-# r_A = np.array([-a_AB * (m_B / (m_A + m_B)), 0, 0])  # Position of A
-# r_B = np.array([a_AB * (m_A / (m_A + m_B)), 0, 0])   # Position of B
-
-# # Calculate the orbital velocities using the Vis-Viva equation
-# # v_A = np.array([0, np.sqrt(mu_AB * (2/np.linalg.norm(r_A) - 1/a_AB)), 0])  # Velocity of A
-# # v_B = np.array([0, -np.sqrt(mu_AB * (2/np.linalg.norm(r_B) - 1/a_AB)), 0])  # Velocity of B
-# # v_A = np.array([0, np.sqrt(mu_AB * (1/a_AB)), 0])  # Velocity of A
-# # v_B = np.array([0, -np.sqrt(mu_AB * (1/a_AB)), 0])  # Velocity of B
-# v_A = np.array([0, 4.8e3, 0])  # Velocity of A
-# v_B = np.array([0, -4.8e3, 0])  # Velocity of B
-
-# # Position and velocity of Proxima Centauri (C) (still treated as orbiting the center of mass)
-# a_C = 1.3015e15  # Semi-major axis of Proxima Centauri's orbit (8700 au)
-# r_C = np.array([a_C, 0, 0])  # Position of C, assuming it lies along x-axis
-# v_C = np.array([0, np.sqrt(G * (m_A + m_B) / np.linalg.norm(r_C)), 0])  # Velocity of C
-
-
-
-
-
-
 
 #-------------------
 # Obtain real data
 #-------------------
-def obtain_ephemeris(bodies_names, bodies_ids, start_date='2024-01-01', end_date='2024-12-31', step='1d'):
+def obtain_ephemeris(bodies_names, bodies_ids, start_date='2022-01-01', end_date='2023-12-31', step='1d'):
     """
     Obtain ephemeris data (positions and velocities) for the given celestial bodies.
     
@@ -92,7 +62,7 @@ def obtain_ephemeris(bodies_names, bodies_ids, start_date='2024-01-01', end_date
     
     # Query ephemeris data for each body
     for body_name, body_id in zip(bodies_names, bodies_ids):
-        obj = Horizons(id=body_id, location='@0', 
+        obj = Horizons(id=body_id, location='500@0', 
                        epochs={'start': start_date, 'stop': end_date, 'step': step})
         vecs = obj.vectors()
         
@@ -106,7 +76,7 @@ def obtain_ephemeris(bodies_names, bodies_ids, start_date='2024-01-01', end_date
             'vx': vecs['vx'], 'vy': vecs['vy'], 'vz': vecs['vz']
         }
     
-    # Organize the data into a dictionary with human-readable labels
+    # Organise the data into a dictionary
     data = {'time': time_stamps}
     for body_name in bodies_names:
         data[body_name] = trajectories[body_name]
@@ -129,7 +99,7 @@ def obtain_ephemeris(bodies_names, bodies_ids, start_date='2024-01-01', end_date
 #     y0 = np.array(positions + velocities)
 #     return y0
 
-def initial_conditions(data, bodies_names):
+def initial_conditions_si(data, bodies_names):
     positions = []
     velocities = []
     
@@ -209,7 +179,8 @@ def calculate_gravitational_force(pos_1, pos_2, mass_1, mass_2):
     '''
     distance_vector = pos_2 - pos_1
     distance = np.linalg.norm(distance_vector)
-    if distance == 0:  # Prevent division by zero in case of overlapping bodies
+    epsilon = 1e-10  # Small threshold to avoid instability in division
+    if distance < epsilon:  # If distance is too small, treat it as 0
         return np.zeros_like(distance_vector)
     force = G * mass_1 * mass_2 * distance_vector / distance**3
     return force
@@ -221,8 +192,8 @@ def newton_accelerations(t, y, masses):
     n = len(masses)  # no. of bodies
     
     # Unpack positions and velocities from the state vector y
-    positions = y[:n*3].reshape((n, 3))   # (n x 3) array of positions
-    velocities = y[n*3:].reshape((n, 3))  # (n x 3) array of velocities
+    positions = y[:n*3].reshape(n, 3)  # (n x 3) array of positions
+    velocities = y[n*3:].reshape(n, 3) # (n x 3) array of velocities
     
     accelerations = np.zeros_like(positions)  # initialise accel.s (n x 3 array)
 
@@ -241,26 +212,30 @@ def newton_accelerations(t, y, masses):
 # Obtain eph data
 # bodies_names = ['Jupiter', 'Sun', 'Earth', 'Saturn']
 # bodies_ids = ['599', '10', '399', '699']
-bodies_names = ['Sun', 'Jupiter', 'Saturn']
-bodies_ids = ['10', '599', '699']
-ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids) # , step='1h')
+bodies_names = ['Sun', 'Earth', 'Moon']
+bodies_ids = ['10', '399', '301']
+# bodies_names = ['Sun', 'Jupiter barycenter', 'Saturn barycenter']
+# bodies_ids = ['10', '5', '6']
+ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids , step='1h')
 
 # Simulation parameters
 # y0 = np.concatenate([r_A, r_B, r_C, v_A, v_B, v_C])
-y0 = initial_conditions(ephemeris_data, bodies_names)
+y0 = initial_conditions_si(ephemeris_data, bodies_names)
 print(y0)
 # print(y0.shape)  # (18,)
 t_span, t_eval = time_parameters(ephemeris_data)
 # print(t_span, t_eval)
 # print(t_span)
-t_span = (0, 1 * year)  # Simulate for 5 years
-t_eval = np.linspace(*t_span, 10000)  # Ensure consistent steps. make many steps, eg 600 in 5 years is not good enough and will get # solution.message = 'Required step size is less than spacing between numbers.'
+t_span = (0, 2 * year)  # Simulate for n years. 8,760 hours in a normal year
+t_eval = np.linspace(*t_span, 2 * 8760)  # Ensure consistent steps. make many steps, eg 600 in 5 years is not good enough and will get # solution.message = 'Required step size is less than spacing between numbers.'
 # print(t_span)
 
 # Solve the system
 # solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses,))
-solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses,))
+solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses,), rtol=1e-8, atol=1e-8)
+# solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses,))
 # solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses, G, c))
+# solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses, G, c))
 
 # Extract results with consistent time steps
 t_result = solution.t
@@ -269,6 +244,7 @@ soly_num = np.array(solution.y)
 print(soly_num.shape)
 positions = solution.y[:9, :].T  # Positions: r_A, r_B, r_C
 velocities = solution.y[9:, :].T  # Velocities: v_A, v_B, v_C
+
 
 #------------------------------
 # Sim data save
@@ -283,42 +259,23 @@ data = {
     'v_B_x': velocities[:, 3], 'v_B_y': velocities[:, 4], 'v_B_z': velocities[:, 5],
     'v_C_x': velocities[:, 6], 'v_C_y': velocities[:, 7], 'v_C_z': velocities[:, 8],
 }
-# data = {
-#     'time': t_result,  # Include time if needed
-#     'A': {
-#         'x': positions[:, 0], 'y': positions[:, 1], 'z': positions[:, 2],
-#         'vx': velocities[:, 0], 'vy': velocities[:, 1], 'vz': velocities[:, 2]
-#     },
-#     'B': {
-#         'x': positions[:, 3], 'y': positions[:, 4], 'z': positions[:, 5],
-#         'vx': velocities[:, 3], 'vy': velocities[:, 4], 'vz': velocities[:, 5]
-#     },
-#     'C': {
-#         'x': positions[:, 6], 'y': positions[:, 7], 'z': positions[:, 8],
-#         'vx': velocities[:, 6], 'vy': velocities[:, 7], 'vz': velocities[:, 8]
-#     }
-# }
 df = pd.DataFrame(data)
 
 # Ask the user if they want to save the data
 save_data = input("Do you want to save the simulation data? (y/n): ").strip().lower()
 if save_data == 'y':
-    # Save results to HDF5 file
+    # Save results to csv file
     df.to_csv('simulation_data.csv', mode='w')
-    print("Simulation data saved to simulation_data.hdf5")
+    print("Simulation data saved to simulation_data.csv")
 else:
     print("Simulation data not saved.")
     
 
-
-
 #------------------------------
 # Ephemeris data save
 #------------------------------
-# Assuming ephemeris_data is the output from the obtain_ephemeris function
 time = ephemeris_data['time']
 
-# Assume the body names are 'Earth', 'Jupiter', 'Saturn' and map them to 'A', 'B', 'C'
 positions = []
 velocities = []
 
@@ -333,11 +290,11 @@ for body_name in bodies_names:
     positions.append(body_positions)
     velocities.append(body_velocities)
 
-# Stack all positions and velocities horizontally (shape will be (n, 9) for 3 bodies)
+# Stack all positions and velocities horizontally. (shape will be (n, 9) for 3 bodies)
 positions = np.hstack(positions)
 velocities = np.hstack(velocities)
 
-# Now create the data dictionary in the desired format
+# Create the data dictionary in the same format as the sim data
 ephemeris_data = {
     'time': time,
     'r_A_x': positions[:, 0], 'r_A_y': positions[:, 1], 'r_A_z': positions[:, 2],
@@ -352,8 +309,8 @@ df = pd.DataFrame(ephemeris_data)
 # Ask the user if they want to save the data
 save_data = input("Do you want to save the ephemeris data? (y/n): ").strip().lower()
 if save_data == 'y':
-    # Save results to HDF5 file
+    # Save results to csv file
     df.to_csv('ephemeris_data.csv', mode='w')
-    print("Ephemeris data saved to ephemeris_data.hdf5")
+    print("Ephemeris data saved to ephemeris_data.csv")
 else:
     print("Ephemeris data not saved.")
