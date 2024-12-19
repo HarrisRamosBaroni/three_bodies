@@ -99,7 +99,18 @@ def obtain_ephemeris(bodies_names, bodies_ids, start_date='2022-01-01', end_date
 #     y0 = np.array(positions + velocities)
 #     return y0
 
-def initial_conditions_si(data, bodies_names):
+def initial_conditions_si(data, bodies_names, noise_percentage=0.0):
+    """
+    Obtain initial conditions of initial value problem with specifiable gaussian noise
+
+    Parameters:
+    -data: dictionary containing emphemeris data
+    -bodies_names: names of celestial body that user is interested in (list of 3 strs)
+    -noise_multiplier: PERCENTAGE noise to add on each initial value returned
+
+    Returns:
+    y0: initial values for the ivp [x, y, z, vx, vy, vz]
+    """
     positions = []
     velocities = []
     
@@ -123,8 +134,12 @@ def initial_conditions_si(data, bodies_names):
     
     # Concatenate positions and velocities to form the initial state vector
     y0 = np.array(positions + velocities)
-    
-    return y0
+
+    if noise_percentage:
+        for i in range(len(y0)):
+            y0[i] += noise_percentage/100 * np.randn() 
+            
+    return y0 
 
 # Define t_span and t_eval based on data['time']
 def time_parameters(data):
