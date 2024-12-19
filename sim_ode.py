@@ -231,36 +231,124 @@ bodies_names = ['Sun', 'Earth', 'Moon']
 bodies_ids = ['10', '399', '301']
 # bodies_names = ['Sun', 'Jupiter barycenter', 'Saturn barycenter']
 # bodies_ids = ['10', '5', '6']
-ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids , step='1h')
+#ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids , step='1h')
 
-# Simulation parameters
-# y0 = np.concatenate([r_A, r_B, r_C, v_A, v_B, v_C])
-y0 = initial_conditions_si(ephemeris_data, bodies_names)
-print(y0)
-# print(y0.shape)  # (18,)
-t_span, t_eval = time_parameters(ephemeris_data)
-# print(t_span, t_eval)
-# print(t_span)
-t_span = (0, 2 * year)  # Simulate for n years. 8,760 hours in a normal year
-t_eval = np.linspace(*t_span, 2 * 8760)  # Ensure consistent steps. make many steps, eg 600 in 5 years is not good enough and will get # solution.message = 'Required step size is less than spacing between numbers.'
-# print(t_span)
+class Sim():
+    def __init__(self,bodies_names,bodies_ids,noise_percentage=0.0,method='RK45'):
+        self.bodies_names = bodies_names
+        self.bodies_ids = bodies_ids
+        self.noise_percentage = noise_percentage
+        self.method = method
 
-# Solve the system
-# solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses,))
-solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses,), rtol=1e-8, atol=1e-8)
-# solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses,))
-# solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses, G, c))
-# solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses, G, c))
+        self.ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids, step='1h')
+        # Simulation parameters
+        # y0 = np.concatenate([r_A, r_B, r_C, v_A, v_B, v_C])
+        self.y0 = initial_conditions_si(self.ephemeris_data, bodies_names, noise_percentage=0.0)
+        print(self.y0)
+        # print(y0.shape)  # (18,)
+        self.t_span, self.t_eval = time_parameters(self.ephemeris_data)
+        # print(t_span, t_eval)
+        # print(t_span)
+        self.t_span = (0, 2 * year)  # Simulate for n years. 8,760 hours in a normal year
+        self.t_eval = np.linspace(*self.t_span, 2 * 8760)  # Ensure consistent steps. make many steps, eg 600 in 5 years is not good enough and will get # solution.message = 'Required step size is less than spacing between numbers.'
+        # print(t_span)
 
-# Extract results with consistent time steps
-t_result = solution.t
-# print(solution.y)
-soly_num = np.array(solution.y)
-print(soly_num.shape)
-positions = solution.y[:9, :].T  # Positions: r_A, r_B, r_C
-velocities = solution.y[9:, :].T  # Velocities: v_A, v_B, v_C
+    def solve(self):
+        # Solve the system
+        # solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses,))
+        if self.method == 'RK45':
+            solution = solve_ivp(newton_accelerations, self.t_span, self.y0, t_eval=self.t_eval, method='RK45', args=(masses,), rtol=1e-8, atol=1e-8)
+        # solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses,))
+        # solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses, G, c))
+        # solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses, G, c))
 
+        # Extract results with consistent time steps
+        self.t_result = solution.t
+        # print(solution.y)
+        self.soly_num = np.array(solution.y)
+        print(self.soly_num.shape)
+        self.positions = solution.y[:9, :].T  # Positions: r_A, r_B, r_C
+        self.velocities = solution.y[9:, :].T  # Velocities: v_A, v_B, v_C
 
+    def save(self):
+        #------------------------------
+        # Sim data save
+        #------------------------------
+        # Create a pandas DataFrame
+        t_result = self.t_result
+        positions= self.positions
+        velocities = self.velocities
+
+        data = {
+            'time': t_result,
+            'r_A_x': positions[:, 0], 'r_A_y': positions[:, 1], 'r_A_z': positions[:, 2],
+            'r_B_x': positions[:, 3], 'r_B_y': positions[:, 4], 'r_B_z': positions[:, 5],
+            'r_C_x': positions[:, 6], 'r_C_y': positions[:, 7], 'r_C_z': positions[:, 8],
+            'v_A_x': velocities[:, 0], 'v_A_y': velocities[:, 1], 'v_A_z': velocities[:, 2],
+            'v_B_x': velocities[:, 3], 'v_B_y': velocities[:, 4], 'v_B_z': velocities[:, 5],
+            'v_C_x': velocities[:, 6], 'v_C_y': velocities[:, 7], 'v_C_z': velocities[:, 8],
+        }
+        df = pd.DataFrame(data)
+
+        # Ask the user if they want to save the data
+        save_data = input("Do you want to save the simulation data? (y/n): ").strip().lower()
+        if save_data == 'y':
+            # Save results to csv file
+            df.to_csv(f'simulation_data_noise_{int(self.noise_percentage)}.csv', mode='w')
+            print(f"Simulation data saved to simulation_data_noise_{int(self.noise_percentage)}.csv")
+        else:
+            print("Simulation data not saved.")
+            
+
+        #------------------------------
+        # Ephemeris data save
+        #------------------------------
+        time = self.ephemeris_data['time']
+
+        positions = []
+        velocities = []
+
+        # Extract positions and velocities for the three bodies
+        for body_name in bodies_names:
+            body_data = self.ephemeris_data[body_name]
+            
+            # Extract position (x, y, z) and velocity (vx, vy, vz) for each body
+            body_positions = np.array([body_data['x'], body_data['y'], body_data['z']]).T
+            body_velocities = np.array([body_data['vx'], body_data['vy'], body_data['vz']]).T
+            
+            positions.append(body_positions)
+            velocities.append(body_velocities)
+
+        # Stack all positions and velocities horizontally. (shape will be (n, 9) for 3 bodies)
+        positions = np.hstack(positions)
+        velocities = np.hstack(velocities)
+
+        # Create the data dictionary in the same format as the sim data
+        ephemeris_data = {
+            'time': time,
+            'r_A_x': positions[:, 0], 'r_A_y': positions[:, 1], 'r_A_z': positions[:, 2],
+            'r_B_x': positions[:, 3], 'r_B_y': positions[:, 4], 'r_B_z': positions[:, 5],
+            'r_C_x': positions[:, 6], 'r_C_y': positions[:, 7], 'r_C_z': positions[:, 8],
+            'v_A_x': velocities[:, 0], 'v_A_y': velocities[:, 1], 'v_A_z': velocities[:, 2],
+            'v_B_x': velocities[:, 3], 'v_B_y': velocities[:, 4], 'v_B_z': velocities[:, 5],
+            'v_C_x': velocities[:, 6], 'v_C_y': velocities[:, 7], 'v_C_z': velocities[:, 8],
+        }
+        df = pd.DataFrame(ephemeris_data)
+
+        # Ask the user if they want to save the data
+        save_data = input("Do you want to save the ephemeris data? (y/n): ").strip().lower()
+        if save_data == 'y':
+            # Save results to csv file
+            df.to_csv('ephemeris_data.csv', mode='w')
+            print("Ephemeris data saved to ephemeris_data.csv")
+        else:
+            print("Ephemeris data not saved.")
+        
+
+sim = Sim(bodies_names=bodies_names, bodies_ids=bodies_ids , noise_percentage= 0.0, method='RK45')
+sim.solve()
+sim.save()
+'''
 #------------------------------
 # Sim data save
 #------------------------------
@@ -329,3 +417,5 @@ if save_data == 'y':
     print("Ephemeris data saved to ephemeris_data.csv")
 else:
     print("Ephemeris data not saved.")
+'''
+
