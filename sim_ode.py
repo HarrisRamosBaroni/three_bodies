@@ -197,7 +197,7 @@ def newton_accelerations(t, y, masses):
     return np.concatenate([velocities.flatten(), accelerations.flatten()])
 
 class Sim():
-    def __init__(self, bodies_names, bodies_ids, start_date, end_date, ode, noise_std_pos=0.0, noise_std_vel=0.0, method='RK45', debug_prints=True):
+    def __init__(self, bodies_names, bodies_ids, start_date, end_date, ode, noise_std_pos=0.0, noise_std_vel=0.0, eph_step='1h', method='RK45', debug_prints=True):
         self.bodies_names = bodies_names  # names of the celestial bodies of interest (for labelling purposes)
         self.bodies_ids = bodies_ids      # identification number of the celestial bodies of interest
         self.start_date = start_date      # ephemeris start date eg '2022-01-01'
@@ -209,13 +209,16 @@ class Sim():
         self.ode = ode                    # function describing system ode. eih_accelerations or newton_accelerations 
         self.debug_prints = debug_prints
 
-        self.ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids, start_date=self.start_date, end_date=self.end_date, step='1h')
+        self.ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids, start_date=self.start_date, end_date=self.end_date, step=eph_step)
         # Simulation parameters
         # self.y0 = initial_conditions_si(self.ephemeris_data, bodies_names, noise_std_pos, noise_std_vel)
         # self.t_span, self.t_eval = time_parameters(self.ephemeris_data)
-        sampled_hours = len(self.ephemeris_data['time'])
-        self.t_span = (0, 3600 * sampled_hours)  # run sim for 3600 * sampled_hours seconds
-        self.t_eval = np.linspace(*self.t_span, sampled_hours)  # steps every hour
+        n_samples = len(self.ephemeris_data['time'])
+        if eph_step == '1h': 
+            self.t_span = (0, 3600 * n_samples)  # run sim for 3600 * n_samples seconds
+        elif eph_step == '1d':
+            self.t_span = (0, 24 * 3600 * n_samples)  # run sim for 24 * 3600 * n_samples seconds
+        self.t_eval = np.linspace(*self.t_span, n_samples)  # steps match sample times
         if self.debug_prints:
             # print("type(self.ephemeris_data['time'])", type(self.ephemeris_data['time']))
             unmasked_length = self.ephemeris_data['time'].count()
@@ -383,18 +386,19 @@ masses = (m_A, m_B, m_C)
 # Obtain eph data
 # bodies_names = ['Jupiter', 'Sun', 'Earth', 'Saturn']
 # bodies_ids = ['599', '10', '399', '699']
-bodies_names = ['Sun', 'Earth', 'Moon']
-bodies_ids = ['10', '399', '301']
-# bodies_names = ['Sun', 'Jupiter barycenter', 'Saturn barycenter']
-# bodies_ids = ['10', '5', '6']
+# bodies_names = ['Sun', 'Earth', 'Moon']
+# bodies_ids = ['10', '399', '301']
+bodies_names = ['Sun', 'Jupiter barycenter', 'Saturn barycenter']
+bodies_ids = ['10', '5', '6']
 #ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids , step='1h')
-start_date='2022-01-01'
+start_date='2009-01-01'
+# start_date='2022-01-01'
 end_date='2023-12-31'
 
 sim = Sim(bodies_names=bodies_names, bodies_ids=bodies_ids, start_date=start_date, end_date=end_date,
-          ode=newton_accelerations, noise_std_pos=1e3, noise_std_vel=0.0, method='RK45')
+          ode=eih_accelerations, eph_step='1d', noise_std_pos=1e3, noise_std_vel=1, method='RK45')
 sim.save_eph_data()
-n_runs = 3
+n_runs = 10
 for _ in range(n_runs):
     sim.y0 = None  # obtain initial condition with new gaussian noise
     print("sim.y0", sim.y0)
