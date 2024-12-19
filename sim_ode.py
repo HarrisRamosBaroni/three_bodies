@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.integrate import solve_ivp
 from astroquery.jplhorizons import Horizons
+import astropy.units as u
 import h5py
 
 #-------------------
@@ -31,10 +32,10 @@ masses = (m_A, m_B, m_C)
 # #-------------------
 
 # # Masses (in kg)
-m_A = 2.188e30  # Alpha Centauri A
-m_B = 1.81e30   # Alpha Centauri B
-m_C = 0.2429e30  # Proxima Centauri
-masses = (m_A, m_B, m_C)
+# m_A = 2.188e30  # Alpha Centauri A
+# m_B = 1.81e30   # Alpha Centauri B
+# m_C = 0.2429e30  # Proxima Centauri
+# masses = (m_A, m_B, m_C)
 
 # # Semi-major axis (in meters)
 # # a_AB = 3.5455e12  # Approximate semi-major axis of Alpha Centauri A and B (23.7 au)
@@ -115,17 +116,44 @@ def obtain_ephemeris(bodies_names, bodies_ids, start_date='2024-01-01', end_date
 #---------------------------------------
 # Initial conditions and sim parameters
 #---------------------------------------
+# def initial_conditions(data, bodies_names):
+#     positions = []
+#     velocities = []
+    
+#     for body in bodies_names:
+#         # Extract positions and velocities for the body
+#         positions.extend([data[body]['x'][0], data[body]['y'][0], data[body]['z'][0]])
+#         velocities.extend([data[body]['vx'][0], data[body]['vy'][0], data[body]['vz'][0]])
+    
+#     # Concatenate positions and velocities
+#     y0 = np.array(positions + velocities)
+#     return y0
+
 def initial_conditions(data, bodies_names):
     positions = []
     velocities = []
     
     for body in bodies_names:
-        # Extract positions and velocities for the body
-        positions.extend([data[body]['x'][0], data[body]['y'][0], data[body]['z'][0]])
-        velocities.extend([data[body]['vx'][0], data[body]['vy'][0], data[body]['vz'][0]])
+        # Convert positions and velocities using astropy units
+        # Assuming the input data is in AU and AU/day, we will convert them to meters and meters per second
+        
+        # Position conversion: AU to meters
+        x = (data[body]['x'][0] * u.au).to(u.m).value
+        y = (data[body]['y'][0] * u.au).to(u.m).value
+        z = (data[body]['z'][0] * u.au).to(u.m).value
+        
+        # Velocity conversion: AU/day to m/s
+        vx = (data[body]['vx'][0] * u.au / u.day).to(u.m / u.s).value
+        vy = (data[body]['vy'][0] * u.au / u.day).to(u.m / u.s).value
+        vz = (data[body]['vz'][0] * u.au / u.day).to(u.m / u.s).value
+        
+        # Append converted values to the respective lists
+        positions.extend([x, y, z])
+        velocities.extend([vx, vy, vz])
     
-    # Concatenate positions and velocities
+    # Concatenate positions and velocities to form the initial state vector
     y0 = np.array(positions + velocities)
+    
     return y0
 
 # Define t_span and t_eval based on data['time']
@@ -215,20 +243,23 @@ def newton_accelerations(t, y, masses):
 # bodies_ids = ['599', '10', '399', '699']
 bodies_names = ['Sun', 'Jupiter', 'Saturn']
 bodies_ids = ['10', '599', '699']
-ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids)
+ephemeris_data = obtain_ephemeris(bodies_names, bodies_ids) # , step='1h')
 
 # Simulation parameters
 # y0 = np.concatenate([r_A, r_B, r_C, v_A, v_B, v_C])
 y0 = initial_conditions(ephemeris_data, bodies_names)
 print(y0)
 # print(y0.shape)  # (18,)
+t_span, t_eval = time_parameters(ephemeris_data)
+# print(t_span, t_eval)
+# print(t_span)
 t_span = (0, 1 * year)  # Simulate for 5 years
 t_eval = np.linspace(*t_span, 10000)  # Ensure consistent steps. make many steps, eg 600 in 5 years is not good enough and will get # solution.message = 'Required step size is less than spacing between numbers.'
-# t_span, t_eval = time_parameters(ephemeris_data)
-# print(t_span, t_eval)
+# print(t_span)
 
 # Solve the system
-solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses,))
+# solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses,))
+solution = solve_ivp(newton_accelerations, t_span, y0, t_eval=t_eval, method='LSODA', args=(masses,))
 # solution = solve_ivp(eih_accelerations, t_span, y0, t_eval=t_eval, method='RK45', args=(masses, G, c))
 
 # Extract results with consistent time steps
