@@ -288,7 +288,7 @@ positions = []
 velocities = []
 
 # Extract positions and velocities for the three bodies
-for body_name in ['Earth', 'Jupiter', 'Saturn']:
+for body_name in bodies_names:
     body_data = ephemeris_data[body_name]
     
     # Extract position (x, y, z) and velocity (vx, vy, vz) for each body
